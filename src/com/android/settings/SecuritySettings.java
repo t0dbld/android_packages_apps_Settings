@@ -20,6 +20,7 @@ package com.android.settings;
 import java.util.Observable;
 import java.util.Observer;
 
+import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
 import android.app.admin.DevicePolicyManager;
@@ -33,20 +34,25 @@ import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.SystemProperties;
 import android.preference.CheckBoxPreference;
+import android.preference.ListPreference;
 import android.preference.Preference;
 import android.preference.PreferenceActivity;
 import android.preference.PreferenceCategory;
 import android.preference.PreferenceManager;
 import android.preference.PreferenceScreen;
+import android.preference.Preference.OnPreferenceChangeListener;
 import android.provider.Settings;
 import android.security.Credentials;
 import android.security.KeyStore;
 import android.telephony.TelephonyManager;
+import android.util.Log;
 import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.android.internal.widget.LockPatternUtils;
+import com.authentec.amjni.AM_STATUS;
+import android.content.ComponentName;
 
 /**
  * Gesture lock pattern settings.
@@ -64,6 +70,7 @@ public class SecuritySettings extends PreferenceActivity {
     private static final String KEY_LOCK_ENABLED = "lockenabled";
     private static final String KEY_VISIBLE_PATTERN = "visiblepattern";
     private static final String KEY_TACTILE_FEEDBACK_ENABLED = "unlock_tactile_feedback";
+    private static final String KEY_START_DATABASE_ADMINISTRATION = "start_database_administration";
 
     // Encrypted File Systems constants
     private static final String PROPERTY_EFS_ENABLED = "persist.security.efs.enabled";
@@ -71,6 +78,7 @@ public class SecuritySettings extends PreferenceActivity {
 
     private CheckBoxPreference mVisiblePattern;
     private CheckBoxPreference mTactileFeedback;
+    private Preference mStartDatabaseAdministration;
 
     private CheckBoxPreference mShowPassword;
 
@@ -79,6 +87,7 @@ public class SecuritySettings extends PreferenceActivity {
     private static final String LOCATION_GPS = "location_gps";
     private static final String ASSISTED_GPS = "assisted_gps";
     private static final int SET_OR_CHANGE_LOCK_METHOD_REQUEST = 123;
+    private static final int TSM_RESULT = 195;
 
     // Credential storage
     private CredentialStorage mCredentialStorage = new CredentialStorage();
@@ -149,6 +158,9 @@ public class SecuritySettings extends PreferenceActivity {
                 case DevicePolicyManager.PASSWORD_QUALITY_SOMETHING:
                     addPreferencesFromResource(R.xml.security_settings_pattern);
                     break;
+                case DevicePolicyManager.PASSWORD_QUALITY_FINGER:
+                    addPreferencesFromResource(R.xml.security_settings_finger);
+                    break;
                 case DevicePolicyManager.PASSWORD_QUALITY_NUMERIC:
                     addPreferencesFromResource(R.xml.security_settings_pin);
                     break;
@@ -167,6 +179,8 @@ public class SecuritySettings extends PreferenceActivity {
 
         // tactile feedback. Should be common to all unlock preference screens.
         mTactileFeedback = (CheckBoxPreference) pm.findPreference(KEY_TACTILE_FEEDBACK_ENABLED);
+
+        mStartDatabaseAdministration = (Preference) findPreference(KEY_START_DATABASE_ADMINISTRATION);
 
         int activePhoneType = TelephonyManager.getDefault().getPhoneType();
 
@@ -256,7 +270,15 @@ public class SecuritySettings extends PreferenceActivity {
             lockPatternUtils.setVisiblePatternEnabled(isToggled(preference));
         } else if (KEY_TACTILE_FEEDBACK_ENABLED.equals(key)) {
             lockPatternUtils.setTactileFeedbackEnabled(isToggled(preference));
-        } else if (preference == mShowPassword) {
+        } else if (KEY_START_DATABASE_ADMINISTRATION.equals(key)) {
+		    // invoke the external activity
+		    Intent intent = new Intent();
+		    ComponentName component = new ComponentName("com.authentec.TrueSuiteMobile", 
+                                                        "com.authentec.TrueSuiteMobile.DatabaseAdministration");
+		    intent.setComponent(component);
+		    intent.setAction(Intent.ACTION_MAIN);
+		    startActivityForResult(intent, TSM_RESULT);
+        }else if (preference == mShowPassword) {
             Settings.System.putInt(getContentResolver(), Settings.System.TEXT_SHOW_PASSWORD,
                     mShowPassword.isChecked() ? 1 : 0);
         } else if (preference == mNetwork) {
@@ -303,12 +325,52 @@ public class SecuritySettings extends PreferenceActivity {
         return ((CheckBoxPreference) pref).isChecked();
     }
 
+    // The toast() function is provided to allow non-UI thread code to
+    // conveniently raise a toast...
+    private void toast(final String s)
+    {
+    	runOnUiThread(new Runnable() {
+    		public void run()
+    		{
+    			Toast.makeText(SecuritySettings.this, s, Toast.LENGTH_SHORT).show();
+    		}
+    	});
+    }
+
     /**
      * @see #confirmPatternThenDisableAndClear
      */
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+
+        if (TSM_RESULT == requestCode)
+        {    		
+            // NOTE: the result has a bias of 100!
+    		int iResult = resultCode - 100;
+            switch (iResult)
+            {
+                case AM_STATUS.eAM_STATUS_OK:
+                    // Disable the fingerprint unlock mode if all fingers have been deleted.
+                    if (!mLockPatternUtils.savedFingerExists()) {
+                        mLockPatternUtils.setLockFingerEnabled(false);
+                    }
+                    break;
+
+                case AM_STATUS.eAM_STATUS_LIBRARY_NOT_AVAILABLE:
+                    toast(getString(R.string.lockfinger_tsm_library_not_available_toast));
+                    break;
+
+                case AM_STATUS.eAM_STATUS_USER_CANCELED:
+                    // Do nothing!
+                    break;
+
+                default:
+                    toast(getString(R.string.lockfinger_dbadmin_failure_default_toast, iResult));
+                    break;
+            }
+    	}
+
         createPreferenceHierarchy();
     }
 
