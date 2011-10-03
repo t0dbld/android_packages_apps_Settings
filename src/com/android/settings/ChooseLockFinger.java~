@@ -125,7 +125,7 @@ public class ChooseLockFinger extends PreferenceActivity {
                 if (msTempPasscode != null) {
                     miResult = TSM.LAP(ChooseLockFinger.this).usingPasscode(TSM.Hexify(msTempPasscode)).enroll().exec();
                 } else {
-                    miResult = TSM.LAP(ChooseLockFinger.this).addFunction("_classicEnroll").exec();
+                    miResult = TSM.LAP(this).addFunction("_classicEnroll").exec();
                 }
 
                 // process the returned result

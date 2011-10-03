@@ -3,10 +3,7 @@
 <!-- resource category: settings2.2 -->
 <!-- file generated at 05:10:07 on 2011/08/12-->
 <resources>
-    <!-- Title and Summary for PreferenceScreen to launch Enrollment -->
-    <string name ="finger_enrollment">Finger Enrollment</string>
-    <string name ="start_finger_enrollment_summary">Registers fingers for use with lock screen and other applications</string>
-   
+
     <!-- Summary for PreferenceScreen to launch picker for security method when there is none -->
     <string name="lockfinger_unlock_set_unlock_launch_picker_summary">Lock screen with a pattern, finger, PIN, or password</string>
 
